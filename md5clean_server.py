@@ -74,20 +74,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 
 <div class="card">
 <h2>📤 上传视频（可多选，每个最大 1GB）</h2>
-<div class="drop" id="drop">
+<label class="drop" id="drop" for="f">
 <div class="big">📁</div>
 <div class="t">点击选择 或 拖拽视频到这里</div>
 <div class="s" id="fileinfo">支持 mp4 / mkv / avi / mov / flv 等</div>
-<div class="s" style="margin-top:6px"><a id="folderlink" style="color:#60a5fa;text-decoration:underline;cursor:pointer">📂 或选择整个文件夹批量上传</a></div>
-</div>
+<div class="s" style="margin-top:6px"><span id="folderlink" style="color:#60a5fa;text-decoration:underline;cursor:pointer">📂 或选择整个文件夹批量上传</span></div>
+</label>
 <input type="file" id="f" accept="video/*,.mp4,.mkv,.avi,.mov,.flv,.ts,.wmv,.rmvb,.webm" multiple hidden>
 <input type="file" id="fold" webkitdirectory multiple hidden>
+<div id="upwrap" style="display:none;margin-top:12px">
+<div class="upinfo" id="upinfo" style="font-size:12px;color:#94a3b8;margin-bottom:6px"></div>
+<div class="bar"><i id="upfill" style="width:0%"></i></div>
+</div>
 
 <div class="opts">
 <label class="opt"><input type="checkbox" id="keepaudio"><span>🔊</span> 保留原声</label>
 <label class="opt"><input type="checkbox" id="mute"><span>🔇</span> 静音</label>
-<label class="opt"><input type="checkbox" id="trimchk"><span>✂️</span> 掐头去尾 <input type="number" id="trim" value="1" min="0" max="60" disabled> 秒</label>
-<label class="opt"><input type="checkbox" id="speedchk"><span>⚡</span> 变速 <input type="number" id="speed" value="1.05" step="0.05" min="0.5" max="2" disabled> 倍</label>
+<label class="opt"><input type="checkbox" id="trimchk"><span>✂️</span> 掐头去尾 <input type="number" id="trim" value="1" min="0" max="60" inputmode="decimal"> 秒</label>
+<label class="opt"><input type="checkbox" id="speedchk"><span>⚡</span> 变速 <input type="number" id="speed" value="1.05" step="0.05" min="0.5" max="2" inputmode="decimal"> 倍</label>
 </div>
 
 <div class="mode">
@@ -114,10 +118,16 @@ el.qcount=document.getElementById('qcount');
 let mode='fast';
 document.getElementById('mfast').onclick=()=>{mode='fast';document.getElementById('mfast').classList.add('on');document.getElementById('mdeep').classList.remove('on')};
 document.getElementById('mdeep').onclick=()=>{mode='deep';document.getElementById('mdeep').classList.add('on');document.getElementById('mfast').classList.remove('on')};
-document.getElementById('trimchk').onchange=e=>document.getElementById('trim').disabled=!e.target.checked;
-document.getElementById('speedchk').onchange=e=>document.getElementById('speed').disabled=!e.target.checked;
-el.drop.onclick=()=>el.f.click();
-document.getElementById('folderlink').onclick=e=>{e.stopPropagation();el.fold.click()};
+document.getElementById('trimchk').onchange=e=>document.getElementById('trim').style.opacity=e.target.checked?'1':'.4';
+document.getElementById('speedchk').onchange=e=>document.getElementById('speed').style.opacity=e.target.checked?'1':'.4';
+// 数字框点击/触摸时不要触发复选框切换
+['trim','speed'].forEach(id=>{
+  const el=document.getElementById(id);
+  el.onclick=e=>{e.stopPropagation();};
+  el.onpointerdown=e=>{e.stopPropagation();};
+});
+el.drop.onclick=()=>{};  // label for="f" 原生触发文件选择（移动端可靠）
+document.getElementById('folderlink').onclick=e=>{e.preventDefault();e.stopPropagation();el.fold.click()};
 el.fold=document.getElementById('fold');
 el.fold.onchange=()=>{
   const vids=['mp4','mkv','avi','mov','flv','ts','wmv','rmvb','webm','m4v','mpg','mpeg','3gp'];
@@ -135,7 +145,9 @@ el.drop.ondrop=e=>{e.preventDefault();el.drop.classList.remove('over');if(e.data
 el.f.onchange=()=>{if(el.f.files.length)upload(el.f.files)};
 function upload(files){
   const st=document.getElementById('fileinfo');
+  const upwrap=document.getElementById('upwrap'),upinfo=document.getElementById('upinfo'),upfill=document.getElementById('upfill');
   st.textContent='已选 '+files.length+' 个文件';
+  upwrap.style.display='block';
   const opt={mode:mode,
     mute:document.getElementById('mute').checked?'1':'0',
     keepaudio:document.getElementById('keepaudio').checked?'1':'0',
@@ -144,18 +156,31 @@ function upload(files){
   let i=0;
   (async()=>{
     for(const f of files){
-      st.textContent='上传中 ('+(++i)+'/'+files.length+'): '+f.name;
-      const fd=new FormData();fd.append('file',f);
-      for(const k in opt)fd.append(k,opt[k]);
+      i++;
+      upfill.style.width='0%';
+      upinfo.textContent='📤 上传中 ('+i+'/'+files.length+'): '+f.name;
       try{
-        const r=await fetch('/md5clean/api/clean',{method:'POST',body:fd});
-        const j=await r.json();
+        const j=await xhrUpload(f,opt,(pct)=>upfill.style.width=pct+'%');
         if(j.ok)addJob(j.job_id,f.name);else alert(f.name+' 上传失败: '+j.error);
       }catch(e){alert(f.name+' 网络错误');}
     }
+    upwrap.style.display='none';
     st.textContent='全部提交完成，排队处理中…';
     el.f.value='';
   })();
+}
+function xhrUpload(f,opt,onprogress){
+  return new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST','/md5clean/api/clean');
+    xhr.upload.onprogress=e=>{if(e.lengthComputable)onprogress(Math.round(e.loaded/e.total*100))};
+    xhr.onload=()=>{try{resolve(JSON.parse(xhr.responseText))}catch(e){reject(e)}};
+    xhr.onerror=()=>reject(new Error('network'));
+    const fd=new FormData();
+    fd.append('file',f);
+    for(const k in opt)fd.append(k,opt[k]);
+    xhr.send(fd);
+  });
 }
 function addJob(id,name){jobs[id]={name:name,status:'上传中'};render();poll(id)}
 async function poll(id){
