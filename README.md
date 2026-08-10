@@ -58,6 +58,27 @@ location /md5clean/ {
 }
 ```
 
+### 登录保护（可选，推荐公网部署时开启）
+
+```bash
+# 1. 生成密码文件（替换为你的账号密码）
+apt-get install -y apache2-utils
+htpasswd -bc /etc/nginx/.md5clean_htpasswd 你的账号 '你的密码'
+chown root:www-data /etc/nginx/.md5clean_htpasswd   # 关键！nginx 需要能读到
+chmod 640 /etc/nginx/.md5clean_htpasswd
+
+# 2. nginx 加两行
+# location /md5clean/ {
+#     auth_basic "MD5 Clean 登录";
+#     auth_basic_user_file /etc/nginx/.md5clean_htpasswd;
+#     proxy_pass http://127.0.0.1:8791;
+#     ...
+# }
+```
+
+> ⚠️ 坑：htpasswd 文件若 chmod 600（仅 root），nginx 进程读不了会返回 500。
+> 必须 chown root:www-data + chmod 640。
+
 ## 工作原理
 
 ```
