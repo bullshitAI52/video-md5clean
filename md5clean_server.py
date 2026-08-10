@@ -7,7 +7,7 @@
 端口 8791; nginx: /md5clean/ -> 127.0.0.1:8791/
 """
 import hashlib, os, shutil, subprocess, threading, time, uuid, json
-from flask import Flask, request, render_template_string, send_file, jsonify
+from flask import Flask, request, render_template_string, send_file, jsonify, redirect
 
 app = Flask(__name__)
 BASE = "/tmp/md5clean"
@@ -230,7 +230,7 @@ function render(){
     if(j.md5a)meta='<div class="meta">MD5: <code>'+j.md5b+'</code> → <code>'+j.md5a+'</code><br>时长 '+j.dur+' · 大小 '+j.size+'</div>';
     if(j.err)meta='<div class="meta" style="color:#f87171">'+esc(j.err)+'</div>';
     const dl=(j.url)?'<a class="dl" href="'+j.url+'">⬇️ 下载</a>':'';
-    const delb='<span class="del" onclick="del(\''+id+'\')">🗑 删除</span>';
+    const delb='<span class="del" data-id="'+id+'" onclick="del(this.dataset.id)">🗑 删除</span>';
     return '<div class="job"><div class="row1"><span class="name">'+esc(j.name)+'</span>'+st+'</div>'+bar+meta+dl+delb+'</div>';
   }).join('');
 }
@@ -419,6 +419,10 @@ restore_jobs_from_disk()
 @app.route("/md5clean/")
 def index():
     return render_template_string(PAGE)
+
+@app.route("/md5clean")
+def index_noslash():
+    return redirect("/md5clean/")
 
 @app.route("/md5clean/api/clean", methods=["POST"])
 def clean():
