@@ -142,13 +142,25 @@ el.fold.onchange=()=>{
     return vids.includes(ext);
   });
   if(!files.length){alert('文件夹里没有视频文件');return}
-  upload(files);
+  pick(files);
   el.fold.value='';
 };
 el.drop.ondragover=e=>{e.preventDefault();el.drop.classList.add('over')};
 el.drop.ondragleave=()=>el.drop.classList.remove('over');
-el.drop.ondrop=e=>{e.preventDefault();el.drop.classList.remove('over');if(e.dataTransfer.files.length)upload(e.dataTransfer.files)};
-el.f.onchange=()=>{if(el.f.files.length)upload(el.f.files)};
+el.drop.ondrop=e=>{e.preventDefault();el.drop.classList.remove('over');if(e.dataTransfer.files.length)pick(e.dataTransfer.files)};
+el.f.onchange=()=>{if(el.f.files.length)pick(el.f.files)};
+let selectedFiles=null;
+function pick(files){
+  selectedFiles=Array.from(files);
+  document.getElementById('fileinfo').textContent='✅ 已选 '+selectedFiles.length+' 个文件，点下方「开始处理」上传';
+  el.btn.disabled=false;
+}
+el.btn.onclick=()=>{
+  if(!selectedFiles||!selectedFiles.length){showToast('请先选择视频文件',true);return}
+  const files=selectedFiles;selectedFiles=null;
+  el.btn.disabled=true;
+  upload(files);
+};
 function upload(files){
   const st=document.getElementById('fileinfo');
   const upwrap=document.getElementById('upwrap'),upinfo=document.getElementById('upinfo'),upfill=document.getElementById('upfill');
