@@ -79,6 +79,21 @@ chmod 640 /etc/nginx/.md5clean_htpasswd
 > ⚠️ 坑：htpasswd 文件若 chmod 600（仅 root），nginx 进程读不了会返回 500。
 > 必须 chown root:www-data + chmod 640。
 
+**日常密码管理：**
+
+```bash
+# 修改密码（去掉 -c，保留原有账号）
+htpasswd -b /etc/nginx/.md5clean_htpasswd 账号名 '新密码'
+
+# 添加第二个账号
+htpasswd -b /etc/nginx/.md5clean_htpasswd 新账号 '新密码'
+
+# 删除账号
+htpasswd -D /etc/nginx/.md5clean_htpasswd 账号名
+```
+
+> 🔒 账号密码以加密哈希存在服务器，**不会进 Git 仓库**，克隆部署后必须自己设置。
+
 ## 工作原理
 
 ```
