@@ -73,7 +73,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 </style></head><body>
 <div class="wrap">
 <div class="header">
-<h1>🎬 视频 MD5 清洗 <span style="font-size:12px;background:rgba(96,165,250,.2);color:#60a5fa;padding:2px 8px;border-radius:6px;vertical-align:middle">v3.3</span></h1>
+<h1>🎬 视频 MD5 清洗 <span style="font-size:12px;background:rgba(96,165,250,.2);color:#60a5fa;padding:2px 8px;border-radius:6px;vertical-align:middle">v3.4</span></h1>
 <p>上传 → 排队处理 → 下载清洗后的视频 · 文件保留 24 小时</p>
 </div>
 
@@ -109,6 +109,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 
 <div class="card">
 <h2>📋 处理队列 <span style="color:#64748b;font-size:12px" id="qcount"></span></h2>
+<div id="batchbar" style="display:none;align-items:center;gap:10px;margin:10px 0;flex-wrap:wrap">
+<label style="font-size:13px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="selall" style="width:16px;height:16px"> 全选</label>
+<span id="selcount" style="font-size:12px;color:#94a3b8"></span>
+<button class="bbtn" id="bbdl" style="padding:7px 14px;border:none;border-radius:8px;background:linear-gradient(90deg,#059669,#10b981);color:#fff;font-size:13px;font-weight:600;cursor:pointer">⬇️ 批量下载</button>
+<button class="bbtn" id="bbdel" style="padding:7px 14px;border:none;border-radius:8px;background:rgba(248,113,113,.15);color:#f87171;font-size:13px;cursor:pointer;border:1px solid rgba(248,113,113,.3)">🗑 批量删除</button>
+</div>
 <div id="jobs"><div class="empty">暂无任务</div></div>
 </div>
 
@@ -214,7 +220,7 @@ async function poll(id){
       const j=await r.json();
       if(!jobs[id])return;
       if(j.status==='queued'){jobs[id].status='q';jobs[id].pos=j.pos}
-      else if(j.status==='processing')jobs[id].status='p';
+      else if(j.status==='processing'){jobs[id].status='p';jobs[id].prog=j.progress||0}
       else if(j.status==='done'){jobs[id].status='ok';jobs[id].md5b=j.md5_before;jobs[id].md5a=j.md5_after;jobs[id].url=j.url;jobs[id].size=j.size;jobs[id].dur=j.duration}
       else if(j.status==='error'){jobs[id].status='err';jobs[id].err=j.error}
       render();
@@ -229,12 +235,12 @@ function del(id){
 function render(){
   const ids=Object.keys(jobs);
   el.qcount.textContent=ids.length?'（共 '+ids.length+' 个）':'';
-  if(!ids.length){el.jobs.innerHTML='<div class="empty">暂无任务</div>';return}
+  if(!ids.length){el.jobs.innerHTML='<div class="empty">暂无任务</div>';refreshBatch();return}
   el.jobs.innerHTML=ids.map(id=>{
     const j=jobs[id];
     let st='',bar='';
     if(j.status==='q'){st='<span class="st q">⏳ 排队中</span>'}
-    else if(j.status==='p'){st='<span class="st p"><span class="spin"></span>处理中…</span>';bar='<div class="bar"><i style="width:60%"></i></div>'}
+    else if(j.status==='p'){const p=j.prog||0;st='<span class="st p"><span class="spin"></span>处理中 '+p+'%</span>';bar='<div class="bar"><i style="width:'+p+'%"></i></div>'}
     else if(j.status==='ok'){st='<span class="st ok">✅ 完成</span>';bar='<div class="bar"><i style="width:100%;background:linear-gradient(90deg,#059669,#10b981)"></i></div>'}
     else if(j.status==='err'){st='<span class="st err">❌ 失败</span>'}
     else if(j.status==='上传中'){st='<span class="st q">📤 上传中</span>'}
@@ -243,9 +249,39 @@ function render(){
     if(j.err)meta='<div class="meta" style="color:#f87171">'+esc(j.err)+'</div>';
     const dl=(j.url)?'<a class="dl" href="'+j.url+'">⬇️ 下载</a>':'';
     const delb='<span class="del" data-id="'+id+'" onclick="del(this.dataset.id)">🗑 删除</span>';
-    return '<div class="job"><div class="row1"><span class="name">'+esc(j.name)+'</span>'+st+'</div>'+bar+meta+dl+delb+'</div>';
+    const cb='<label style="display:flex;align-items:center;cursor:pointer;flex-shrink:0"><input type="checkbox" class="jobsel" data-id="'+id+'" style="width:16px;height:16px"></label>';
+    return '<div class="job" style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1">'+cb+'<div class="row1"><span class="name">'+esc(j.name)+'</span>'+st+'</div>'+bar+meta+dl+delb+'</div></div>';
   }).join('');
+  refreshBatch();
 }
+function refreshBatch(){
+  const cbs=document.querySelectorAll('.jobsel');
+  const n=Array.from(cbs).filter(c=>c.checked).length;
+  document.getElementById('selcount').textContent=n?'已选 '+n+' 个':'';
+  document.getElementById('batchbar').style.display=cbs.length?'flex':'none';
+}
+document.addEventListener('change',e=>{
+  if(e.target.classList&&e.target.classList.contains('jobsel'))refreshBatch();
+  if(e.target.id==='selall'){
+    document.querySelectorAll('.jobsel').forEach(c=>c.checked=e.target.checked);
+    refreshBatch();
+  }
+});
+document.getElementById('bbdl').onclick=()=>{
+  const ids=Array.from(document.querySelectorAll('.jobsel:checked')).map(c=>c.dataset.id);
+  if(!ids.length){showToast('请先勾选要下载的文件',true);return}
+  window.location.href='/md5clean/api/batch_download?ids='+ids.join(',');
+};
+document.getElementById('bbdel').onclick=()=>{
+  const ids=Array.from(document.querySelectorAll('.jobsel:checked')).map(c=>c.dataset.id);
+  if(!ids.length){showToast('请先勾选要删除的任务',true);return}
+  if(!confirm('确定删除选中的 '+ids.length+' 个任务？'))return;
+  fetch('/md5clean/api/batch_delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok){ids.forEach(id=>delete jobs[id]);render();showToast('🗑 已删除 '+d.deleted+' 个任务')}
+      else showToast('删除失败',true);
+    });
+};
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function showToast(msg,isErr){
   const t=document.getElementById('toast');
@@ -259,7 +295,7 @@ function loadHistory(){
   fetch('/md5clean/api/list').then(r=>r.json()).then(d=>{
     (d.jobs||[]).forEach(j=>{
       if(jobs[j.id])return;
-      jobs[j.id]={name:j.name,status:j.status,md5b:j.md5_before,md5a:j.md5_after,url:j.url,size:j.size,dur:j.duration,err:j.error};
+      jobs[j.id]={name:j.name,status:j.status,md5b:j.md5_before,md5a:j.md5_after,url:j.url,size:j.size,dur:j.duration,err:j.error,prog:j.progress};
       if(j.status==='queued'||j.status==='processing')poll(j.id);
     });
     render();
@@ -294,11 +330,37 @@ def get_duration(path):
     except ValueError:
         return 0.0
 
-def run_throttled(args, timeout=3600):
-    proc = subprocess.Popen(["/usr/bin/ffmpeg", "-y"] + args,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+def run_throttled(args, timeout=3600, progress_cb=None):
+    full = ["/usr/bin/ffmpeg", "-y"] + args
+    if progress_cb:
+        full += ["-progress", "pipe:1"]
+    proc = subprocess.Popen(full, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     limiter = subprocess.Popen(["nice", "-n", "19", "cpulimit", "-l", str(CPU_LIMIT), "-p", str(proc.pid)],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if progress_cb:
+        def read_progress():
+            for line in proc.stdout:
+                try:
+                    line = line.decode(errors="ignore").strip()
+                    if line.startswith("out_time_us="):
+                        us = int(line.split("=")[1])
+                        progress_cb(us / 1e6)
+                except Exception:
+                    pass
+        threading.Thread(target=read_progress, daemon=True).start()
+        # 有进度读取线程时不能用 communicate()（会抢读 stdout），改线程读 stderr
+        err_lines = []
+        def read_err():
+            for line in proc.stderr:
+                err_lines.append(line)
+        threading.Thread(target=read_err, daemon=True).start()
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill(); limiter.kill()
+            return subprocess.CompletedProcess(args, 124, stderr=b"timeout")
+        limiter.kill()
+        return subprocess.CompletedProcess(args, proc.returncode, stderr=b"".join(err_lines))
     try:
         _, err = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -330,6 +392,14 @@ def process_job(job):
             if r.returncode != 0 or not os.path.exists(orig_audio_path):
                 orig_audio_path = None
     try:
+        total_dur = 0.0
+        if content_change or mode == "deep":
+            total_dur = get_duration(src)
+        job["progress"] = 0
+        def prog_cb(secs):
+            if total_dur > 0:
+                with LOCK:
+                    job["progress"] = min(99, int(secs / total_dur * 100))
         if content_change:
             args = ["-i", src]
             if trim > 0:
@@ -344,13 +414,13 @@ def process_job(job):
                 args += ["-an"]
             args += ["-threads", "1", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                      "-movflags", "+faststart", "-sn", out]
-            r = run_throttled(args)
+            r = run_throttled(args, progress_cb=prog_cb)
         elif mode == "deep":
             args = ["-i", src, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                     "-c:a", "aac", "-threads", "1", "-movflags", "+faststart", out]
             if keep_audio:
                 args.insert(3, "-an")
-            r = run_throttled(args)
+            r = run_throttled(args, progress_cb=prog_cb)
         else:
             args = ["-i", src, "-map", "0", "-c", "copy", "-map_metadata", "-1",
                     "-movflags", "+faststart", out]
@@ -368,6 +438,7 @@ def process_job(job):
                 os.replace(mux_out, out)
             os.remove(orig_audio_path)
         job["md5_before"] = m1
+        job["progress"] = 100
         job["md5_after"] = md5(out)
         job["size"] = f"{os.path.getsize(out)/1024/1024:.1f}MB"
         job["duration"] = f"{get_duration(out):.1f}s"
@@ -463,6 +534,7 @@ def clean():
         "status": "queued",
         "md5_before": None, "md5_after": None,
         "url": None, "size": None, "duration": None, "error": None,
+        "progress": 0,
         "created": time.time(),
     }
     with LOCK:
@@ -480,7 +552,8 @@ def status(jid):
         pos = QUEUE.index(job) + 1 if job in QUEUE else 0
     return jsonify(ok=True, status=job["status"], pos=pos,
                    md5_before=job["md5_before"], md5_after=job["md5_after"],
-                   url=job["url"], size=job["size"], duration=job["duration"], error=job["error"])
+                   url=job["url"], size=job["size"], duration=job["duration"],
+                   progress=job.get("progress", 0), error=job["error"])
 
 @app.route("/md5clean/api/list")
 def job_list():
@@ -490,6 +563,7 @@ def job_list():
             "id": j["id"], "name": j["name"], "status": j["status"],
             "md5_before": j["md5_before"], "md5_after": j["md5_after"],
             "url": j["url"], "size": j["size"], "duration": j["duration"],
+            "progress": j.get("progress", 100),
             "error": j["error"], "created": j["created"],
         } for j in sorted(JOBS.values(), key=lambda x: -x["created"])]
     return jsonify(ok=True, jobs=jobs)
@@ -504,6 +578,41 @@ def job_delete(jid):
         shutil.rmtree(job["work"], ignore_errors=True)
         return jsonify(ok=True)
     return jsonify(ok=False, error="任务不存在")
+
+@app.route("/md5clean/api/batch_delete", methods=["POST"])
+def batch_delete():
+    ids = (request.get_json(silent=True) or {}).get("ids", [])
+    if not isinstance(ids, list):
+        return jsonify(ok=False, error="参数错误")
+    n = 0
+    for jid in ids:
+        with LOCK:
+            job = JOBS.pop(jid, None)
+            if job in QUEUE:
+                QUEUE.remove(job)
+        if job:
+            shutil.rmtree(job["work"], ignore_errors=True)
+            n += 1
+    return jsonify(ok=True, deleted=n)
+
+@app.route("/md5clean/api/batch_download")
+def batch_download():
+    ids = request.args.get("ids", "").split(",")
+    zip_path = os.path.join(BASE, "batch_" + uuid.uuid4().hex + ".zip")
+    import zipfile
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as zf:
+        for jid in ids:
+            with LOCK:
+                job = JOBS.get(jid)
+            if not job or not job.get("url"):
+                continue
+            work = job["work"]
+            cleaned = [os.path.join(work, x) for x in os.listdir(work) if x.startswith("cleaned")]
+            if not cleaned:
+                continue
+            name = os.path.splitext(job["name"])[0] + "_cleaned" + os.path.splitext(cleaned[0])[1]
+            zf.write(cleaned[0], arcname=name)
+    return send_file(zip_path, as_attachment=True, download_name="md5clean_batch.zip")
 
 @app.route("/md5clean/api/download/<wid>")
 def download(wid):
