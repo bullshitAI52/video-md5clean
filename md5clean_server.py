@@ -23,6 +23,9 @@ LOCK = threading.Lock()
 PAGE = """<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>视频 MD5 清洗工具</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -63,12 +66,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .del{display:inline-block;margin-top:8px;margin-left:8px;padding:7px 12px;border-radius:8px;background:rgba(248,113,113,.15);color:#f87171;font-size:12px;cursor:pointer;border:1px solid rgba(248,113,113,.3)}
 .empty{text-align:center;color:#64748b;font-size:13px;padding:20px 0}
 .foot{text-align:center;font-size:11px;color:#475569;padding:14px 0 6px}
+.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:rgba(15,23,42,.95);border:1px solid rgba(74,222,128,.4);color:#4ade80;padding:10px 18px;border-radius:10px;font-size:14px;z-index:99;display:none;max-width:85%;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.toast.err{border-color:rgba(248,113,113,.4);color:#f87171}
 .spin{display:inline-block;width:12px;height:12px;border:2px solid #60a5fa;border-top-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-1px;margin-right:4px}
 @keyframes sp{to{transform:rotate(360deg)}}
 </style></head><body>
 <div class="wrap">
 <div class="header">
-<h1>🎬 视频 MD5 清洗</h1>
+<h1>🎬 视频 MD5 清洗 <span style="font-size:12px;background:rgba(96,165,250,.2);color:#60a5fa;padding:2px 8px;border-radius:6px;vertical-align:middle">v3.3</span></h1>
 <p>上传 → 排队处理 → 下载清洗后的视频 · 文件保留 24 小时</p>
 </div>
 
@@ -109,6 +114,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 
 <div class="foot">文件处理完成后保留 24 小时 · CPU 限速 60% 不卡机 · 隐私自动清除</div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
 const jobs={},el={};
@@ -161,12 +167,17 @@ function upload(files){
       upinfo.textContent='📤 上传中 ('+i+'/'+files.length+'): '+f.name;
       try{
         const j=await xhrUpload(f,opt,(pct)=>upfill.style.width=pct+'%');
-        if(j.ok)addJob(j.job_id,f.name);else alert(f.name+' 上传失败: '+j.error);
-      }catch(e){alert(f.name+' 网络错误');}
+        if(j.ok){
+          addJob(j.job_id,f.name);
+          showToast('✅ '+f.name+' 上传成功，已加入队列');
+        }else{showToast('❌ '+f.name+' 上传失败: '+j.error,true)}
+      }catch(e){showToast('❌ '+f.name+' 网络错误',true)}
     }
     upwrap.style.display='none';
     st.textContent='全部提交完成，排队处理中…';
     el.f.value='';
+    showToast('🎉 全部 '+files.length+' 个文件已提交，开始排队处理');
+    setTimeout(()=>{const q=document.getElementById('jobs');if(q)q.scrollIntoView({behavior:'smooth'})},400);
   })();
 }
 function xhrUpload(f,opt,onprogress){
@@ -224,6 +235,13 @@ function render(){
   }).join('');
 }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function showToast(msg,isErr){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast'+(isErr?' err':'');
+  t.style.display='block';
+  clearTimeout(t._timer);
+  t._timer=setTimeout(()=>t.style.display='none',3000);
+}
 loadHistory();
 function loadHistory(){
   fetch('/md5clean/api/list').then(r=>r.json()).then(d=>{
