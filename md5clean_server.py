@@ -332,6 +332,17 @@ def get_duration(path):
     except ValueError:
         return 0.0
 
+def get_audio_duration(path):
+    """返回音轨时长（秒），无音轨返回 0"""
+    r = subprocess.run(["/usr/bin/ffprobe", "-v", "quiet", "-select_streams", "a",
+                        "-show_entries", "stream=duration", "-of", "csv=p=0", path],
+                       capture_output=True, text=True)
+    try:
+        v = r.stdout.strip().splitlines()[0]
+        return float(v)
+    except Exception:
+        return 0.0
+
 def run_throttled(args, timeout=3600, progress_cb=None):
     full = ["/usr/bin/ffmpeg", "-y"] + args
     if progress_cb:
@@ -380,6 +391,8 @@ def process_job(job):
     out = os.path.join(work, "cleaned" + ext)
     content_change = mute or trim > 0 or speed != 1.0
     keep_audio = job.get("keep_audio", False) and not mute
+    job["orig_dur"] = round(get_duration(src), 1)
+    job["orig_audio_dur"] = round(get_audio_duration(src), 1)
     orig_audio_path = None
     if keep_audio and not content_change:
         keep_audio = False  # 快速清洗本就流复制，音频天然保留
@@ -442,12 +455,15 @@ def process_job(job):
         job["md5_before"] = m1
         job["progress"] = 100
         job["md5_after"] = md5(out)
+        job["audio_dur"] = round(get_audio_duration(out), 1)
         job["size"] = f"{os.path.getsize(out)/1024/1024:.1f}MB"
         job["duration"] = f"{get_duration(out):.1f}s"
         job["url"] = f"/md5clean/api/download/{os.path.basename(work)}"
         job["status"] = "done"
         with open(os.path.join(work, "info.json"), "w") as fp:
-            json.dump({"md5_before": m1, "md5_after": job["md5_after"], "name": job["name"]}, fp)
+            json.dump({"md5_before": m1, "md5_after": job["md5_after"], "name": job["name"],
+                       "orig_dur": job.get("orig_dur"), "orig_audio_dur": job.get("orig_audio_dur"),
+                       "audio_dur": job.get("audio_dur")}, fp)
         os.remove(src)
     except Exception as e:
         job["status"] = "error"
@@ -536,7 +552,7 @@ def clean():
         "status": "queued",
         "md5_before": None, "md5_after": None,
         "url": None, "size": None, "duration": None, "error": None,
-        "progress": 0,
+        "progress": 0, "orig_dur": None, "orig_audio_dur": None, "audio_dur": None,
         "created": time.time(),
     }
     with LOCK:
@@ -555,7 +571,9 @@ def status(jid):
     return jsonify(ok=True, status=job["status"], pos=pos,
                    md5_before=job["md5_before"], md5_after=job["md5_after"],
                    url=job["url"], size=job["size"], duration=job["duration"],
-                   progress=job.get("progress", 0), error=job["error"])
+                   progress=job.get("progress", 0), error=job["error"],
+                   orig_dur=job.get("orig_dur"), orig_audio_dur=job.get("orig_audio_dur"),
+                   audio_dur=job.get("audio_dur"))
 
 @app.route("/md5clean/api/list")
 def job_list():
@@ -566,6 +584,8 @@ def job_list():
             "md5_before": j["md5_before"], "md5_after": j["md5_after"],
             "url": j["url"], "size": j["size"], "duration": j["duration"],
             "progress": j.get("progress", 100),
+            "orig_dur": j.get("orig_dur"), "orig_audio_dur": j.get("orig_audio_dur"),
+            "audio_dur": j.get("audio_dur"),
             "error": j["error"], "created": j["created"],
         } for j in sorted(JOBS.values(), key=lambda x: -x["created"])]
     return jsonify(ok=True, jobs=jobs)
