@@ -94,6 +94,33 @@ htpasswd -D /etc/nginx/.md5clean_htpasswd 账号名
 
 > 🔒 账号密码以加密哈希存在服务器，**不会进 Git 仓库**，克隆部署后必须自己设置。
 
+## 🤖 Telegram Bot（可选）
+
+`video_bot.py`：把清洗功能变成 Telegram 机器人（零 LLM 成本）。
+
+**功能：**
+- 发视频（≤20MB）→ 弹菜单按钮（清洗/保留原声/静音/自定义参数）
+- 描述里写参数直接处理：`变速1.2 保留原声 掐头2` / `静音` / `深度`
+- 实时数字进度（排队第几位 / 处理 43% / 进度条）
+- 完工对比报告：视频时长前后、音乐时长前后（原速保留/随视频截断）、MD5 前后
+
+**部署：**
+```bash
+# 1. 从 @BotFather 创建 bot 拿 token
+printf '你的token' > /root/.hermes/scripts/.video_bot_token
+chmod 600 /root/.hermes/scripts/.video_bot_token
+
+# 2. systemd 服务
+cp video_bot.py /root/.hermes/scripts/
+# /etc/systemd/system/video-bot.service:
+# [Service] ExecStart=/usr/bin/python3 /root/.hermes/scripts/video_bot.py
+# Restart=always
+
+systemctl daemon-reload && systemctl enable --now video-bot
+```
+
+> 依赖：仅 Python 标准库 + curl；复用 md5clean 的本地 API（127.0.0.1:8791），处理逻辑零重写。
+
 ## 已知不足（Roadmap）
 
 - ⏳ **处理进度是假的**：排队/处理中只有转圈 + 装饰性进度条，没有真实百分比（未解析 ffmpeg 输出）
